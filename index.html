@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<!-- saved from url=(0014)about:internet -->
+<html lang="en">
+<head>
+<title>Simulation</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=11" />
+<meta http-equiv="Pragma" content="no-cache">
+<style>
+body {
+    background-color:#4db8f6de;
+    color:#d2cec8;
+    font-size: 12px;
+    color: #fff;
+    font-family: Consolas, 'ConsolasRegular', 'Courier New', monospace;
+    overflow: hidden;
+    margin:0; padding: 0;
+}
+#debug{position:absolute; top:10px; left:10px;}
+</style>
+</head>
+<body>
+	<!-- <script src="js/three.min.71.js"></script> -->
+    <!-- <script src="js/THREEx.WindowResize.js"></script> -->
+	<!-- <script src="js/stats.min.js"></script> -->
+	
+<script src="js/three.min.js"></script>
+<script src="js/ColladaLoader.js"></script>
+<!-- <script src="js/OBJLoader.js"></script> -->
+<!-- <script src="js/OBJLoader2.js"></script> -->
+<script src="js/sea3d.min.js"></script>
+<script src="js/OrbitControls.js"></script>
+<script src="js/gui.min.js"></script>
+<!-- <script src="js/traffic.min.js"></script> -->
+
+<script>
+
+var  TRAFFIC = {
+        TYPE_OF_CARS: [{
+            w: 1.8,
+            l: 4.8,
+            h: 1.4,
+            m: "car001",
+            name: "fordM"
+        }, {
+            w: 1.8,
+            l: 4.5,
+            h: 1.8,
+            m: "car002",
+            name: "vaz"
+        }, {
+            w: 2.2,
+            l: 5,
+            h: 1.5,
+            m: "car003",
+            name: "coupe"
+        }, {
+            w: 2.2,
+            l: 5.2,
+            h: 1.9,
+            m: "car004",
+            name: "c4"
+        }, {
+            w: 2.2,
+            l: 5.2,
+            h: 1.8,
+            m: "car005",
+            name: "ben"
+        }, {
+            w: 2.1,
+            l: 5.4,
+            h: 1.7,
+            m: "car006",
+            name: "taxi"
+        }, {
+            w: 2.2,
+            l: 5.4,
+            h: 1.9,
+            m: "car007",
+            name: "207"
+        }, {
+            w: 2.3,
+            l: 5.9,
+            h: 1.7,
+            m: "car008",
+            name: "police"
+        }, {
+            w: 2.7,
+            l: 6.2,
+            h: 2.6,
+            m: "car009",
+            name: "van1"
+        }, {
+            w: 2.2,
+            l: 6.6,
+            h: 2.8,
+            m: "car010",
+            name: "van2"
+        }, {
+            w: 2.8,
+            l: 7,
+            h: 3.2,
+            m: "car011",
+            name: "van3"
+        }, {
+            w: 2.8,
+            l: 8.9,
+            h: 3.9,
+            m: "car012",
+            name: "truck1"
+        }, {
+            w: 3,
+            l: 10.6,
+            h: 3.4,
+            m: "car013",
+            name: "truck1"
+        }, {
+            w: 3,
+            l: 12.7,
+            h: 3.4,
+            m: "car014",
+            name: "bus"
+        }],
+        settings: {
+            lightsFlipInterval: 20,
+            gridSize: 30,
+            defaultTimeFactor: 5
+        }
+	};
+
+//------------------------------------------------------------
+var camera, scene, renderer, controls, clock;
+var mesh;
+var grid;
+var pool;
+
+var modelMesh;
+var carModel;
+var carId = -1;
+var pedId = -1;
+	var world;
+	var debug = document.getElementById('debug');
+	var gui;
+	var lastUpdate;
+	var cars = [];
+	var pedestrians = [];
+	var roads = [];
+	var inter = [];
+
+    var car_geo, car_mat = [];
+	var inter_geo, road_geo, inter_mat, inter_mat0, road_mat, grass_geo, grass_mat,
+	 gr_geo, gr_mat, inter_matx, inter_maty, inter_matz, inter_matw, inter_mate;
+
+    var sets = {timeFactor:5, case:0, cameraPosition: 0, speed1:1, speed2:1.2, accident:true, stop:false};
+
+
+	window.onload = Main;
+
+
+	function Main(){
+	    pool = new V.SeaPool()
+	    pool.load('cars', init);
+	}
+	
+	/********************************************************
+	 * *********  Init All
+	 * 
+	 * *****************************************************/
+	function init(){
+		
+		var selectCase = new param;
+
+		gui = new dat.GUI();
+		var guiWorld = gui.addFolder('world');
+		guiWorld.open();
+
+		guiWorld.add(selectCase, 'No_respect');
+		guiWorld.add(selectCase, 'Respect_crosswalk');
+		guiWorld.add(selectCase, 'Penalti');
+		guiWorld.add(selectCase, 'Group_ped');
+		guiWorld.add(selectCase, 'No_crosswalk');
+		guiWorld.add(selectCase, 'Two_directions');
+		guiWorld.add(selectCase, 'Random');
+		guiWorld.add(selectCase, 'carsNumber').min(0).max(6).step(1).listen();
+
+		ctrl = guiWorld.add(selectCase, 'car1_speed').min(0).max(300).step(1).listen();
+		ctrl.onFinishChange(function(value) {
+  			sets.speed1 = value/100;
+		});
+
+		ctrl2 = guiWorld.add(selectCase, 'car2_speed').min(0).max(300).step(1).listen();
+		ctrl2.onFinishChange(function(value) {
+  			sets.speed2 = value/100;
+		});
+
+		ctrl3 = guiWorld.add(selectCase, 'Pedestrian_stop');
+		ctrl3.onFinishChange(function(value) {
+			if (sets.stop == false)
+				sets.stop = true;
+			else sets.stop = false; 
+		});
+
+		guiWorld.add(selectCase, 'cameraHaut');
+		guiWorld.add(selectCase, 'cameraCar0');
+		guiWorld.add(selectCase, 'cameraCar1');
+		guiWorld.add(selectCase, 'cameraPed');
+	
+	
+		//guiWorld.add(world, 'instantSpeed').step(0.00001).listen();
+		
+		init3d();
+		animate();
+		generateWorld();
+		
+	}
+
+		/********************************************************
+	 * *********  class to adopt User iterface	 
+	 * * 
+	 * *****************************************************/
+
+	 var param = function () {
+			 this.carsNumber = 2;
+			 this.car1_speed = 100;
+			 this.car2_speed = 120;
+			 this.Pedestrian_stop = false;
+		
+			this.No_respect = function(){
+				for (id in pedestrians) 
+					scene.remove(pedestrians[id]);
+				scene.add(pedestrians[0]);
+				pedestrians[0].position.x = -9;
+				//addPedestrian(0, -9, 10);
+				sets.case = 1;
+				sets.accident =false;
+
+				cars[0].position.z = -130;
+				cars[1].position.z = -130;
+
+				//console.log(pedestrians);
+				//pedestrians[0].position.x = -9;
+
+			};
+
+			this.Respect_crosswalk = function(){
+				for (id in pedestrians) 
+					scene.remove(pedestrians[id]);
+				//addPedestrian(0, -9, 10);
+				scene.add(pedestrians[0]);
+				pedestrians[0].position.x = -9;
+
+				sets.case = 2;
+				sets.accident =false;
+
+				cars[0].position.z = -130;
+				cars[1].position.z = -130;
+
+				 //pedestrians[0].position.x = -9;
+				
+			}
+
+			this.Penalti =  function(){
+				for (id in pedestrians) 
+					scene.remove(pedestrians[id]);
+				
+				scene.add(pedestrians[0]);
+				pedestrians[0].position.x = -9;
+				
+				sets.case = 3;
+				sets.accident =false;
+				
+				cars[0].position.z = -130;
+				cars[1].position.z = -130;
+				 
+				//pedestrians[0].position.x = -9;
+
+			
+			};
+
+			this.Group_ped =  function(){
+				for (id in pedestrians) 
+					scene.remove(pedestrians[id]);
+				sets.case = 4;
+				sets.accident =false;
+				
+				cars[0].position.z = -220;
+				cars[1].position.z = -130;
+
+				for(i=0;i<=6;i++)
+				scene.add(pedestrians[i]);
+
+				pedestrians[0].position.x = -12;
+				pedestrians[1].position.x = -12;
+				pedestrians[2].position.x = -14;
+				pedestrians[3].position.x = -17;
+				pedestrians[4].position.x = -18;
+				pedestrians[5].position.x = -18;
+				pedestrians[6].position.x = -22;
+				/*
+				addPedestrian(0, -12, 10);
+				addPedestrian(1, -12, 15);
+				addPedestrian(2, -14, 19);
+				addPedestrian(3, -17, 18);
+				addPedestrian(4, -18, 14);
+				addPedestrian(5, -18, 22);
+				addPedestrian(6, -22, 14);
+*/
+				
+		
+			};
+
+
+			
+			this.No_crosswalk =  function(){
+				for (id in pedestrians) 
+					scene.remove(pedestrians[id]);
+				sets.case = 5;
+				sets.accident =false;
+				
+				cars[0].position.z = -220;
+				cars[1].position.z = -130;
+
+				//for(i=0;i<=6;i++)
+					scene.add(pedestrians[7]);
+					pedestrians[7].position.x = -22;
+			};
+
+
+			this.Two_directions = function(){
+				for (id in pedestrians) 
+					scene.remove(pedestrians[id]);
+				scene.add(pedestrians[0]);
+				pedestrians[0].position.x = -9;
+				//addPedestrian(0, -9, 10);
+				sets.case = 6;
+				sets.accident =false;
+
+				cars[0].position.z = -130;
+				cars[1].position.z = -130;
+				cars[4].position.z = 250;
+				cars[4].rotation.y = 3.14;
+				//console.log(pedestrians);
+				//pedestrians[0].position.x = -9;
+
+			};
+
+			this.Random = function(){
+				for (id in pedestrians) 
+					scene.remove(pedestrians[id]);
+				
+				//addPedestrian(0, -9, 10);
+				sets.case = 7;
+				sets.accident =false;
+
+				cars[0].position.z = -130;
+				cars[1].position.z = -130;
+				cars[2].position.z = -150;
+				cars[3].position.z = -170;
+
+				cars[4].position.z = 250;
+				cars[5].position.z = 270;
+				cars[4].rotation.y = 3.14;
+				cars[5].rotation.y = 3.14;
+				//console.log(pedestrians);
+				//pedestrians[0].position.x = -9;
+				for(i=0;i<=3;i++)
+				scene.add(pedestrians[i]);
+
+				pedestrians[0].position.x = -12;
+				pedestrians[1].position.x = -12;
+				pedestrians[2].position.x = -14;
+				pedestrians[3].position.x = -17;
+				// pedestrians[4].position.x = -18;
+				// pedestrians[5].position.x = -18;
+				// pedestrians[6].position.x = -22;
+			};
+
+			this.cameraHaut = function(){
+				//controls.rotateSpeed = 0;
+				sets.cameraPosition = 0;
+				camera.position.x = -16;
+				camera.position.y = 27;
+				camera.position.z = 48;
+				
+				camera.rotation.x = -0.6;
+				camera.rotation.y = -0.6;
+				camera.rotation.z = -0.4;
+				//camera.rotation. = 2;
+			}
+
+			this.cameraCar0 = function(){
+				//controls.rotateSpeed = 0;
+				sets.cameraPosition = 1;
+				camera.position.x = 4;
+				camera.position.y = 2;
+				camera.position.z = cars[0].position.z;
+				camera.rotation.x = 0;
+				camera.rotation.y = 9.59;
+				camera.rotation.z = 0;
+			}
+
+			this.cameraCar1 = function(){
+				//controls.rotateSpeed = 0;
+				sets.cameraPosition = 2;
+				camera.position.x = 11;
+				camera.position.y = 2;
+				camera.position.z = cars[1].position.z;
+				camera.rotation.x = 0;
+				camera.rotation.y = 9.56;
+				camera.rotation.z = 0;
+				
+			}
+
+			this.cameraPed = function(){
+				//controls.rotateSpeed = 0;
+				controls.target.set(  pedestrians[0].position.x,  pedestrians[0].position.y,  pedestrians[0].position.z );
+				sets.cameraPosition = 3;
+				camera.position.x = pedestrians[0].position.x;
+				camera.position.y = 2;
+				camera.position.z = pedestrians[0].position.z;
+				camera.rotation.x = 0;
+				camera.rotation.y = 4.71;
+				camera.rotation.z = 0;
+				
+			}
+
+		}
+	/********************************************************
+	 * *********  Initialise scen camera ground 
+	 * 
+	 * *****************************************************/
+	function init3d(){
+		renderer = new THREE.WebGLRenderer({precision: "mediump", antialias:true, alpha: true});
+		renderer.setPixelRatio( window.devicePixelRatio );
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		document.body.appendChild( renderer.domElement );
+
+		//
+		grid = TRAFFIC.settings.gridSize;
+
+		camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 4000 );
+		camera.position.x = -16;
+		camera.position.y = 27;
+		camera.position.z = 48;
+		
+		camera.rotation.x = -0.6;
+		camera.rotation.y = -0.6;
+		camera.rotation.z = -0.4;
+		//camera.rotation.z = 3;
+		
+		controls = new THREE.OrbitControls( camera );
+		//camera.lookAt(new THREE.Vector3(0, 0, 100));
+		//camera.rotation.y = 180;
+		scene = new THREE.Scene();
+		scene.fog = new THREE.FogExp2(0xc8e0ff, 0.0003);
+		clock = new THREE.Clock();
+
+
+		//car_geo = new THREE.BoxGeometry( 1, 1, 1 );
+		var env = THREE.ImageUtils.loadTexture( 'env.jpg');
+        env.mapping = THREE.SphericalReflectionMapping;
+
+        car_mat[0] = new THREE.MeshBasicMaterial( { envMap:env, reflectivity:0.9 } );
+        car_mat[1] = new THREE.MeshBasicMaterial( { envMap:env, reflectivity:0.9 } );
+        car_mat[2] = new THREE.MeshBasicMaterial( { envMap:env, reflectivity:0.9 } );
+		
+		var tx;
+		var img = new Image();
+	    img.onload = function(){
+	        generateRandomColor(img, car_mat[0]);
+	        generateRandomColor(img, car_mat[1]);
+	        generateRandomColor(img, car_mat[2]);
+	    }
+	    img.src = 'cars.png';
+
+		inter_geo = new THREE.PlaneBufferGeometry( grid, grid );
+		road_geo = new THREE.PlaneGeometry( grid, grid );
+		grass_geo = new THREE.PlaneGeometry( grid, grid );
+		gr_geo = new THREE.PlaneGeometry( grid, grid );
+
+		inter_geo.applyMatrix(new THREE.Matrix4().makeRotationX(-Math.PI*0.5));
+		road_geo.applyMatrix(new THREE.Matrix4().makeRotationX(-Math.PI*0.5));
+		grass_geo.applyMatrix(new THREE.Matrix4().makeRotationX(-Math.PI*0.5));
+		gr_geo.applyMatrix(new THREE.Matrix4().makeRotationX(-Math.PI*0.5));
+
+
+
+		inter_mat = new THREE.MeshBasicMaterial( { map:THREE.ImageUtils.loadTexture( 'roadx.png' ) } );
+		inter_matx = new THREE.MeshBasicMaterial( { map:THREE.ImageUtils.loadTexture( 'roadx.png' ) } );
+		road_mat = new THREE.MeshBasicMaterial( { map:THREE.ImageUtils.loadTexture( 'road.png' ) } );
+		grass_mat = new THREE.MeshBasicMaterial( { map:THREE.ImageUtils.loadTexture( '/textures/terrain/grasslight-big.jpg' ) } );
+		gr_mat = new THREE.MeshBasicMaterial( { map:THREE.ImageUtils.loadTexture( '/textures/brick_bump.jpg' ) } );
+
+		//----> Initialise the Ground  ---------------------------
+		var t = (7*4)+1
+		var g = new THREE.PlaneGeometry(grid*t,grid*t, t,t);
+		g.applyMatrix(new THREE.Matrix4().makeRotationX(-Math.PI*0.5));
+		//var g_mat = new THREE.MeshBasicMaterial( { color: 0x303030, wireframe:true } );
+
+		//var ground = new THREE.Mesh( g, g_mat );
+
+
+
+
+		// var texture = new THREE.TextureLoader().load( '/textures/terrain/grasslight-big.jpg' );
+		// var texture = new THREE.TextureLoader().load( '/textures/terrain/grasslight-big.jpg' );
+		// var planeMaterial = new THREE.MeshLambertMaterial(  { map: texture } );
+		//var planeMaterial = new THREE.MeshLambertMaterial({color: 0xffffff});
+		// var plane = new THREE.Mesh(g);//, new THREE.MeshBasicMaterial( 
+			//{ map:THREE.ImageUtils.loadTexture( '/textures/terrain/grasslight-big.jpg' ) } ));
+		// plane.receiveShadow = true;
+		// rotate and position the plane
+		// plane.rotation.x = -0.5 * Math.PI;
+		// plane.position.set(0,0,0);
+
+
+
+		// scene.add(plane);
+		// var d = grid*0.5;
+		// plane.position.set(d, -0.2, d);
+
+		var ambientLight = new THREE.AmbientLight(0x555555);
+    		    scene.add(ambientLight);
+ 
+      	     // add directional light source
+     		    directionalLight = new THREE.DirectionalLight(0xffffff,1);
+                directionalLight.position.set(-1, -1, -1).normalize();
+        		scene.add(directionalLight);
+		
+		window.addEventListener( 'resize', onWindowResize, false );
+	}
+
+	/********************************************************
+	 * ********* generate Color for Car
+	 * 
+	 * *****************************************************/
+	function generateRandomColor(img, mat){
+		var canvas = document.createElement( 'canvas' );
+		canvas.width = canvas.height = 1024;
+		var ctx = canvas.getContext('2d');
+		i = 16;
+		var n=0,j=0;
+		for(i=0; i<16;i++){
+			ctx.beginPath();
+			if(i!==11 && i!==15) ctx.fillStyle = V.randCarColor();
+			ctx.rect(n*256, j*256, 256, 256);
+			ctx.fill();
+			n++
+			if(n==4){ n=0; j++; }
+		}
+
+		ctx.drawImage(img, 0, 0, 1024,1024);
+        tx = new THREE.Texture(canvas);
+        tx.needsUpdate = true;
+        tx.flipY = false;
+        mat.map = tx;
+        mat.needsUpdate = true;
+	}
+
+	function onWindowResize() {
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+		renderer.setSize( window.innerWidth, window.innerHeight );
+	}
+
+	/********************************************************
+	 * *********  function principal: animate
+	 * 
+	 * *****************************************************/
+	 var p;
+	function animate() {
+		// p = new param;
+		// console.log(p.car1_speed);
+		var delta = clock.getDelta();
+		// console.log(sets.speed1);
+		if(sets.accident == false)// if accident don't animate
+		{
+			
+			if(!sets.stop) THREE.AnimationHandler.update(delta/2);// animer pedestrian walk
+
+			if(sets.case == 1)// cas1: normal accident
+			{
+				
+					if(cars[0].position.z >= 2 && cars[0].position.z <= 18)
+					{
+						if(pedestrians[0].position.x  < 15 && pedestrians[0].position.x > 0)
+						{	sets.accident = true;
+							alert("accident! " );
+							sets.case = 0;
+						}	
+
+						else cars[0].position.z += sets.speed1;
+					}
+						
+					else if(cars[0].position.z  < 300)
+						cars[0].position.z += sets.speed1;
+
+					if(pedestrians[0].position.x  < 200)
+						if(!sets.stop) pedestrians[0].position.x += 0.1;
+			}
+		
+			else if(sets.case == 2) // case2: of drivers respect pedestrians
+			{
+
+					if(cars[0].position.z  > -7){
+							if(pedestrians[0].position.x  > 15 || pedestrians[0].position.x < 0)
+							cars[0].position.z += 1;
+					}
+					else cars[0].position.z += 1;
+
+					//console.log(pedestrians);
+					if(pedestrians[0].position.x  < 200)
+						if(!sets.stop) pedestrians[0].position.x += 0.1;	
+			}
+			else if(sets.case == 3)  // case3: penalti case
+			{
+					if(cars[1].position.z >= 2  && cars[1].position.z <= 18)
+					{
+						if(pedestrians[0].position.x  < 15 && pedestrians[0].position.x > 6)
+						{	sets.accident = true;
+							alert("accident! ");
+							sets.case = 0;
+						}	
+
+						else cars[1].position.z += sets.speed2;
+					}
+						
+					else if(cars[0].position.z  > -75 ){
+						cars[1].position.z += sets.speed2;
+					}	
+
+					if(cars[0].position.z  > -7){
+							if(pedestrians[0].position.x  > 15 || pedestrians[0].position.x < 0)
+							cars[0].position.z += sets.speed1;
+					}
+					else cars[0].position.z += sets.speed1;
+
+					if(pedestrians[0].position.x  < 200)
+						if(!sets.stop) pedestrians[0].position.x += 0.1;	
+			}
+			else if(sets.case == 4) // case2: of drivers respect pedestrians
+			{
+				    ttmp = false;
+					if(cars[0].position.z  > -7){
+							for( id in pedestrians){
+								if(pedestrians[id].position.x  < 15 && pedestrians[id].position.x > 0)
+								{
+									ttmp = true;
+									break;
+								}	
+								//else ttmp = false;
+							}
+							if(ttmp) cars[0].position.z += sets.speed1;
+					}
+					else cars[0].position.z += sets.speed1;
+					
+					for( id in pedestrians)
+						if(pedestrians[id].position.x  < 200)
+							if(!sets.stop){
+								if(id == 5 || id == 6) pedestrians[id].position.x +=0.3;
+								pedestrians[id].position.x += (Math.random() * (0.15 - 0.05) + 0.05);	
+							} 
+			}
+
+			else if(sets.case == 5) // case2: of drivers respect pedestrians
+			{
+				var ttmp;
+					if(cars[0].position.z  > -45  && cars[0].position.z  < -22){
+							//for( id in pedestrians){
+								if(pedestrians[7].position.x  > 8 || pedestrians[7].position.x < 0)
+									cars[0].position.z += sets.speed1;								
+								else {	
+									sets.accident = true;
+									alert("accident! ");
+									sets.case = 0;
+								}	
+								
+							}
+					
+					else cars[0].position.z += sets.speed1;
+					
+						if(pedestrians[7].position.x  < 200)
+						 if(!sets.stop) pedestrians[7].position.x += (Math.random() * (0.4 - 0.2) + 0.2);	
+			}
+			else if(sets.case == 6)// cas1: normal accident
+			{
+				if(cars[0].position.z  > -7){
+							if(pedestrians[0].position.x  > 15 || pedestrians[0].position.x < 0)
+							cars[0].position.z += 1;
+					}
+					else cars[0].position.z += 1;
+				
+					if(cars[4].position.z >= 2 && cars[4].position.z <= 18)
+					{
+						if(pedestrians[0].position.x  < 30 && pedestrians[0].position.x > 15)
+						{	sets.accident = true;
+							alert("accident! " );
+							sets.case = 0;
+						}	
+
+						else cars[4].position.z -= sets.speed2;
+					}
+						
+					else if(cars[4].position.z  < 300)
+						cars[4].position.z -= sets.speed2;
+
+					if(pedestrians[0].position.x  < 200)
+						if(!sets.stop) pedestrians[0].position.x += 0.1;
+			}
+			else if(sets.case == 7)// cas1: normal accident
+			{
+				for(i=0;i<=3;i++){
+				 	if(cars[i].position.z  > -7 && cars[i].position.z < 10){
+							for(j in pedestrians)
+							if(pedestrians[j].position.x  > 15 || pedestrians[j].position.x < 0)
+							cars[i].position.z +=  (Math.random() * (4.5 - 0.5) + 0.5);
+					}
+					else {
+						if (cars[i].position.z > 200)
+								cars[i].position.z = -170;
+						cars[i].position.z +=  (Math.random() * (4.5 - 0.5) + 0.5);
+					}	
+				}
+				for(i=4;i<=5;i++){
+					if(cars[i].position.z >= 2 && cars[i].position.z <= 18)
+					{
+						for(j=0; j<= 3; j++)
+						if(pedestrians[j].position.x  < 30 && pedestrians[j].position.x > 15)
+						{	sets.accident = true;
+							alert("accident! " );
+							sets.case = 0;
+						}	
+
+						else {
+							if (cars[i].position.z < -170)
+								cars[i].position.z = 200;
+							cars[i].position.z -=  (Math.random() * (4.5 - 0.5) + 0.5);
+						}
+					}
+						
+					else //if(cars[i].position.z  < 300)
+						cars[i].position.z -=   (Math.random() * (4.5 - 0.5) + 0.5);
+
+					for(j=0; j<= 3; j++)	
+					if(pedestrians[j].position.x  < 200)
+						if(!sets.stop) {
+							if(pedestrians[j].position.x > 50)
+								pedestrians[j].position.x = -10;
+							pedestrians[j].position.x +=  (Math.random() * (0.2 - 0.05) + 0.05);	
+
+						}	
+				}
+			}
+
+		}
+		
+		
+		
+		if(sets.cameraPosition == 1){
+				camera.position.z = cars[0].position.z ;
+			}
+			else if(sets.cameraPosition == 2){
+				camera.position.z = cars[1].position.z ;
+			}
+			else if(sets.cameraPosition == 3){
+				camera.position.x = pedestrians[0].position.x ;
+			}
+			
+		//camera.position.z = cars[0].position.z;
+		requestAnimationFrame( animate );
+		renderer.render( scene, camera );
+	}
+
+	
+
+
+
+
+	/*****************************************************************
+	 * *******************
+	 * generate the world : cars - pedestrians - road  - intersection
+	 * ******************* 
+	 * **************************************************************/
+	function generateWorld(){
+			//addPedestrian(0, -9, 10); // 
+			
+
+			addInter(0, 15, 15);
+			
+			//addBuild(0,60,-200);
+			addBuild(0,60,-185);
+			//addBuild(0,60,-170);
+			addBuild(0,60,-145);
+			//addBuild(0,60,-120);
+			addBuild(0,60,-100);
+			//addBuild(0,60,-50);
+			addBuild(0,60,-40);
+			//addBuild(0,60,-30);
+			addBuild(0,60,-15);
+			//addBuild(0,60,-10);
+			//addBuild(0,60,-5);
+
+
+			addBuild(1,-38	,-200);
+			addBuild(1,-38,-185);
+			//addBuild(1,-38,-170);
+			addBuild(1,-38,-145);
+			//addBuild(1,-38,-120);
+			addBuild(1,-38,-100);
+			addBuild(1,-38,-50);
+			//ddBuild(1,-38,-40);
+			//addBuild(1,-38,-30);
+			//addBuild(1,-38,-15);
+			//addBuild(1,-38,-10);
+			//addBuild(1,-38,-5);
+			// addBuild(0,60,0);
+			
+
+			addGr(0, -15, -285, 19, 1);// add first road 
+			addGrass(0, -45, -285, 19, 1);// add first road 
+			addGrass(0, -75, -285, 19, 1);// add first road 
+			addGrass(0, -105, -285, 19, 1);// add first road 
+			addGrass(0, -135, -285, 19, 1);// add first road 
+			addGrass(0, -165, -285, 19, 1);// add first road 
+
+			addGr(0, 45, -285, 19, 1);// add first road 
+			addGrass(0, 75, -285, 19, 1);// add first road 
+			addGrass(0, 105, -285, 19, 1);// add first road 
+			addGrass(0, 135, -285, 19, 1);// add first road 
+			addGrass(0, 165, -285, 19, 1);// add first road 
+			// addGrass(0, 40, -285, 9, 1);// add first road 
+			
+			addRoad(0, 15, -285, 9, 1);// add first road 
+			addRoad(0, 15, 15, 9, 1);// add second road 
+	        
+			addCar( 0, 4, -130, 9) ; // add the first car
+			addCar( 1, 11, -130, 2); // add the second car
+			addCar( 2, 11, -150, 3); // add the second car
+			addCar( 3, 11, -170, 8); // add the second car
+			
+			addCar( 4, 20, 250, 5); // add the second car
+			addCar( 5, 20, 270, 6); // add the second car
+			
+			addPedestrian_child(0, -12, 10);
+			addPedestrian_child(1, -12, 15);
+				addPedestrian_child(2, -14, 19);
+				addPedestrian_child(3, -17, 18);
+				addPedestrian_child(4, -18, 14);
+				addPedestrian(5, -18, 22);
+				addPedestrian(6, -22, 14);
+				
+				addPedestrian(7, -22, -50);
+	}
+
+	function addRoad(id, x, z, long, dir){
+
+			var g = new THREE.Geometry();
+			var m = new THREE.Matrix4();
+
+			while(long--){
+				m.makeTranslation(x, 0, (z+(grid*dir)+((long*grid)*dir)));
+				g.merge( road_geo, m );
+			}
+
+			var c = new THREE.Mesh( g, road_mat );
+			scene.add( c );
+			roads[id] = c;
+	
+	}
+
+
+	function addGrass(id, x, z, long, dir){
+
+		var g = new THREE.Geometry();
+		var m = new THREE.Matrix4();
+
+		while(long--){
+			m.makeTranslation(x, 0, (z+(grid*dir)+((long*grid)*dir)));
+			g.merge( grass_geo, m );
+		}
+
+		var c = new THREE.Mesh( g, grass_mat );
+		scene.add( c );
+	//	roads[id] = c;
+
+	}
+
+	function addGr(id, x, z, long, dir){
+
+		var g = new THREE.Geometry();
+		var m = new THREE.Matrix4();
+
+		while(long--){
+			m.makeTranslation(x, 0, (z+(grid*dir)+((long*grid)*dir)));
+			//if(id==1) m.makeRotation(0,7,0);
+			g.merge( gr_geo, m );
+		}
+
+		var c = new THREE.Mesh( g, gr_mat );
+		if(id==1) c.rotation.y = 3.14;
+		if(id==1) c.rotation.y = 3.14;
+		scene.add( c );
+		//	roads[id] = c;
+
+	}
+
+	function addInter(id, x, z){//intersection
+		inter[id] = new THREE.Mesh( inter_geo, inter_mat );
+    	scene.add( inter[id] );    	
+    	inter[id].position.set(x, 0, z);
+	}
+
+
+    function addCar(id, x, z, model){
+
+		var r = V.randInt(0,2);
+    	carModel = new THREE.Mesh( pool.getGeometry('cars', TRAFFIC.TYPE_OF_CARS[model].m), car_mat[r] );
+		carModel.position.set(x, 0, z);
+		carModel.scale.set(2, 2, -2);
+		scene.add( carModel );
+		cars[id] = carModel;
+    }
+
+  
+
+   
+	
+	/********************************************************
+	 * *********  add Pedestrian
+	 * 
+	 * *****************************************************/
+	function addPedestrian_child(id, x , z) {
+		var jsonLoader = new THREE.JSONLoader();
+		jsonLoader.load('models/girl.json', function(geometry, materials) {
+
+		materials.forEach(function(mat) {
+			mat.skinning = true;
+		});
+
+		// Prepare SkinnedMesh with MeshFaceMaterial (using original texture)
+		modelMesh = new THREE.SkinnedMesh(
+			geometry, new THREE.MeshFaceMaterial(materials)
+		);
+
+		// Set position and scale
+		var scale = 3;
+		//modelMesh.position.set(11000, 0,0);
+    	//modelMesh.scale.set(2, 2, -2);
+		modelMesh.position.set(x, 0, z);
+		modelMesh.scale.set(scale, scale, scale);
+
+		// Prepare animation
+		var animation = new THREE.Animation(
+			modelMesh, geometry.animations[0],
+			THREE.AnimationHandler.CATMULLROM
+		);
+		
+		// Add the mesh and play the animation
+		//scene.add(modelMesh);
+		animation.play();
+
+		// pedId++;
+		pedestrians[id] = modelMesh;
+		});
+
+	}
+
+	
+	
+	function addPedestrian(id, x , z) {
+		// Prepare ColladaLoader
+		var daeLoader = new THREE.ColladaLoader();
+		daeLoader.options.convertUpAxis = true;
+		daeLoader.load('models/model.dae', function(collada) {
+			var modelMesh = collada.scene;
+			// Prepare and play animation
+			modelMesh.traverse( function (child) {
+			if (child instanceof THREE.SkinnedMesh) {
+				var animation = new THREE.Animation(child, child.geometry.animation);
+				animation.play();
+			}
+			} );
+			
+			modelMesh.position.set(x, 0, z);
+			modelMesh.rotation.y = 1.57;
+			modelMesh.scale.set(0.5, 0.5, 0.5);
+			
+			pedestrians[id] = modelMesh;
+			// scene.add(modelMesh);
+		});		
+	}
+
+	
+
+	function addPedestrian_Cowboy(id, x , z) {
+		// Prepare ColladaLoader
+		var daeLoader = new THREE.ColladaLoader();
+		daeLoader.options.convertUpAxis = true;
+		daeLoader.load('models/cowboy.dae', function(collada) {
+			var modelMesh = collada.scene;
+			// Prepare and play animation
+			modelMesh.traverse( function (child) {
+			if (child instanceof THREE.SkinnedMesh) {
+				var animation = new THREE.Animation(child, child.geometry.animation);
+				animation.play();
+			}
+			} );
+			
+			modelMesh.position.set(x, 0, z);
+			modelMesh.rotation.y = 1.57;
+			// modelMesh.posit = 10;
+			// modelMesh.rotation.x = 1.3;
+			modelMesh.scale.set(0.3, 0.3, 0.3);
+			
+			pedestrians[id] = modelMesh;
+			// scene.add(modelMesh);
+		});		
+	}
+
+	function addBuild(id, x , z) {
+		// Prepare ColladaLoader
+		var daeLoader = new THREE.ColladaLoader();
+		daeLoader.options.convertUpAxis = true;
+		daeLoader.load('models/build.dae', function(collada) {
+			var modelMesh = collada.scene;
+			
+			modelMesh.position.set(x, 0, z);
+			modelMesh.rotation.y = 1.57;
+
+			modelMesh.scale.set(0.8, 0.8, 0.8);
+			
+			// pedestrians[id] = modelMesh;
+			scene.add(modelMesh);
+		});		
+	}
+
+	
+
+
+//--------------------------------------------------------------------------------------------------------------
+//----------------	Use SEA3D to Creat cars objects
+//--------------------------------------------------------------------------------------------------------------
+
+var V = {};
+
+//V.randColor = function () { return '#'+Math.floor(Math.random()*16777215).toString(16); }
+V.randCarColor = function () {
+	var carcolors = [
+	[0xFFFFFF, 0xD0D1D3, 0XEFEFEF, 0xEEEEEE],//white
+	[0x252122, 0x302A2B, 0x27362B, 0x2F312B],//black
+	[0x8D9495, 0xC1C0BC, 0xCED4D4, 0xBEC4C4],//silver
+	[0x939599, 0x424242, 0x5A5A5A, 0x747675],//gray
+	[0xC44920, 0xFF4421, 0x600309, 0xD9141E],//red
+	[0x4AD1FB, 0x275A63, 0x118DDC, 0x2994A6],//blue
+	[0xA67936, 0x874921, 0xD7A56B, 0x550007],//brown
+	[0x5FF12C, 0x188047, 0x8DAE29, 0x1AB619],//green
+	[0xFFF10A, 0xFFFFBD, 0xFCFADF, 0xFFBD0A],//yellow/gold
+	[0xB92968, 0x5C1A4F, 0x001255, 0xFFB7E7]//other
+	];
+	var l;
+	var p = V.randInt(0,100), base=0xFFFFFF;
+	var n = V.randInt(0,3);
+
+	if(p<23)l=0;
+	else if(p<44)l=1;
+	else if(p<62)l=2;
+	else if(p<76)l=3;
+	else if(p<84)l=4;
+	else if(p<90)l=5;
+	else if(p<96)l=6;
+	else if(p<97)l=7;
+	else if(p<98)l=8;
+	else l=9;
+
+	var base =carcolors[l][n];
+
+    var resl = base.toString(16);
+    if(resl.length<6) resl = '#0'+resl;
+    else resl = '#'+resl;
+	return resl;
+}
+
+V.lerp = function (a, b, percent) { return a + (b - a) * percent; }
+V.randInt = function (a, b) { return V.lerp(a, b, Math.random()).toFixed(0)*1;}
+
+V.SeaPool = function(){
+    this.meshes = {};
+}
+V.SeaPool.prototype = {
+    constructor: V.SeaPool,
+    load:function(name, callback){
+        this.callback = callback || function(){};
+        var list = "";
+        var loader = new THREE.SEA3D( true );
+        loader.onComplete = function( e ) {
+            this.meshes[name] = {};
+            var i = loader.meshes.length, m;
+            while(i--){
+                m = loader.meshes[i];
+                this.meshes[name][m.name] = m;
+                list+=m.name+',';
+            }
+            this.callback();
+        }.bind(this);
+
+        loader.parser = THREE.SEA3D.DEFAULT;
+        loader.load( 'models/'+name+'.sea' );
+        //loader.invertZ = true;
+        //loader.flipZ = true;
+    },
+    getGeometry:function(obj, name){
+        var g = this.meshes[obj][name].geometry;
+        //var mtx = new THREE.Matrix4().makeScale(1, 1, -1);
+        //g.applyMatrix(mtx);
+        return g;
+    }
+}	
+</script>
+</body>
+</html>
