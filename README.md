@@ -1,5 +1,5 @@
 # 3D-traffic-accident
-traffic accident simulation with ThreeJs
+Traffic accident simulation with ThreeJs
 
 
 ![alt text](https://github.com/ZAHHAR-ISMAIL/3D-traffic-accident/blob/master/exemple/exemple1.png)
